@@ -12,34 +12,33 @@ import Array exposing (..)
 -----------------------------------------------------------
 --------- SIGNALS -----------------------------------------
 -----------------------------------------------------------
-
 delta =
-  Signal.map inSeconds (fps 1)
+  Signal.map inSeconds (fps gameSpeed)
 
 input : Signal Input
 input =
-    Signal.map2 Input
-      Keyboard.arrows
-      delta
+  Signal.map2 Input
+    Keyboard.arrows
+    delta
 
 type alias Input =
-    { direction : Direction
-    , timeDelta : Float
-    }
-
+  { direction : Direction
+  , timeDelta : Float
+  }
 
 main =
   Signal.map2 view Window.dimensions gameState
 
+
 -----------------------------------------------------------
 --------- STATE -------------------------------------------
 -----------------------------------------------------------
-
 gameState : Signal GameState
 gameState =
   Signal.foldp stepGame defaultGame input
 
-(gameWidth, gameHeight) = (800,800)
+(gameSize)  = 30  -- `pixels` squared
+(gameSpeed) = 1   -- updates per second
 
 type alias Board = Array(Array(Tile))
 
@@ -47,7 +46,8 @@ type alias Direction = { x : Int, y : Int }
 
 type alias Square = (Int, Int)
 
-type alias Tile = { state:Bool, coords:Square}
+type alias Tile =
+  { state:Bool, coords:Square}
 
 type alias Snake =
   {direction:Direction, parts:List(Square)}
@@ -55,44 +55,52 @@ type alias Snake =
 type alias GameState =
   {snake:Snake, board:Board}
 
-defaultSnake =  { direction = { x = 0, y = 0 }
-                , parts = [(0,0),(1,0),(2,0)]
-                }
+
+defaultSnake =
+  { direction = { x = 1, y = 0 }
+  , parts = [(0,0),(1,0),(2,0)]
+  }
+
 
 createBoard : Int -> Array(Array(Tile))
 createBoard x =
-  let board = repeat x ( repeat x {state = False, coords = (0, 0)} )
-
-  in indexedMap setRow board
+  let
+    defaultRows =
+      repeat x ( repeat x {state = False, coords = (0, 0)} )
+  in
+    indexedMap setRow defaultRows
 
 setRow : Int -> Array(Tile) -> Array(Tile)
-setRow index row = indexedMap (setTile False index) row
+setRow index row =
+  indexedMap (setTile False index) row
+
 
 setTile : Bool -> Int -> Int -> Tile -> Tile
-setTile state y x tile = { state = state
-                         , coords = (x, y)
-                         }
+setTile state y x tile =
+  { state = state
+  , coords = (x, y)
+  }
+
 
 defaultGame : GameState
 defaultGame =
-    { snake    = defaultSnake
-    , board    = createBoard 20
-    }
+  { snake  = defaultSnake
+  , board  = createBoard gameSize
+  }
+
 
 -----------------------------------------------------------
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
-
-
 stepGame : Input -> GameState -> GameState
 stepGame {timeDelta, direction} ({snake, board} as gameState) =
   let
     newSnake = updateSnake direction snake
     newBoard = updateBoard gameState
   in
-      { gameState |
-          board <- newBoard,
-          snake <- newSnake
+    { gameState |
+        board <- newBoard
+      , snake <- newSnake
       }
 
 updateSnake : Direction -> Snake -> Snake
@@ -103,27 +111,28 @@ updateSnake direction snake =
       else direction
 
       newParts = updateParts snake.direction snake.parts
-
   in
-    {snake |
-      direction <- newDirection
-      , parts <- newParts
+    { snake |
+        direction <- newDirection
+      , parts   <- newParts
       }
 
-updateParts : Direction -> List(Square) -> List(Square)
-updateParts direction squares =
-  case squares of
-    []               -> []
-    square :: squares -> move direction square :: updateParts direction squares
+updateParts : Direction -> List Square -> List Square
+updateParts direction parts =
+  case parts of
+    segment :: []       -> segment :: []
+    segment :: segments -> move direction segment :: segment :: init segments
 
 move : Direction -> Square -> Square
-move direction square = ( fst square + direction.x
-                        , snd square + direction.y
-                        )
+move direction square =
+  ( fst square + direction.x
+  , snd square + direction.y
+  )
 
 updateBoard : GameState -> Board
 updateBoard ({snake, board} as gameState) =
   board
+
 
 -----------------------------------------------------------
 --------- DISPLAY -----------------------------------------
@@ -138,10 +147,23 @@ displayBoard board =
 
 displayRow: Array(Tile) -> Element
 displayRow row =
-  flow right  (toList (map displayTile row))
+  flow right (toList (map displayTile row))
 
 displayTile: Tile -> Element
 displayTile tile =
   case tile.state of
-    True -> collage 20 20 ([filled (Color.rgb 0 0 200) (square 20)])
-    False -> collage 20 20 ([filled (Color.rgb 0 200 200) (square 20)])
+    True ->
+        collage 20 20 ([filled (Color.rgb 0 0 200) (square 20)])
+
+    False ->
+        collage 20 20 ([filled (Color.rgb 200 200 200) (square 20)])
+
+
+-----------------------------------------------------------
+--------- UTILITY -----------------------------------------
+-----------------------------------------------------------
+init : List(Square) -> List(Square)
+init squares =
+  case squares of
+    square :: []   -> []
+    square :: squares -> square :: init squares
