@@ -37,23 +37,18 @@ gameState : Signal GameState
 gameState =
   Signal.foldp stepGame defaultGame input
 
-(gameSize)  = 30  -- `pixels` squared
-(gameSpeed) = 1   -- updates per second
-
-type alias Board = Array(Array(Tile))
+boardSize = 800  -- `pixels` squared
+gameSpeed = 1   -- updates per second
 
 type alias Direction = { x : Int, y : Int }
 
 type alias Square = (Int, Int)
 
-type alias Tile =
-  { state:Bool, coords:Square}
-
 type alias Snake =
   {direction:Direction, parts:List(Square)}
 
 type alias GameState =
-  {snake:Snake, board:Board}
+  {snake:Snake}
 
 
 defaultSnake =
@@ -62,46 +57,23 @@ defaultSnake =
   }
 
 
-createBoard : Int -> Array(Array(Tile))
-createBoard x =
-  let
-    defaultRows =
-      repeat x ( repeat x {state = False, coords = (0, 0)} )
-  in
-    indexedMap setRow defaultRows
-
-setRow : Int -> Array(Tile) -> Array(Tile)
-setRow index row =
-  indexedMap (setTile False index) row
-
-
-setTile : Bool -> Int -> Int -> Tile -> Tile
-setTile state y x tile =
-  { state = state
-  , coords = (x, y)
-  }
-
-
 defaultGame : GameState
 defaultGame =
-  { snake  = defaultSnake
-  , board  = createBoard gameSize
-  }
+  { snake  = defaultSnake }
 
 
 -----------------------------------------------------------
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
 stepGame : Input -> GameState -> GameState
-stepGame {timeDelta, direction} ({snake, board} as gameState) =
+stepGame {timeDelta, direction} ({snake} as gameState) =
   let
     newSnake = updateSnake direction snake
-    newBoard = updateBoard gameState
   in
     { gameState |
-        board <- newBoard
-      , snake <- newSnake
+        snake <- newSnake
       }
+
 
 updateSnake : Direction -> Snake -> Snake
 updateSnake direction snake =
@@ -117,11 +89,13 @@ updateSnake direction snake =
       , parts   <- newParts
       }
 
+
 updateParts : Direction -> List Square -> List Square
 updateParts direction parts =
   case parts of
     segment :: []       -> segment :: []
     segment :: segments -> move direction segment :: segment :: init segments
+
 
 move : Direction -> Square -> Square
 move direction square =
@@ -129,35 +103,18 @@ move direction square =
   , snd square + direction.y
   )
 
-updateBoard : GameState -> Board
-updateBoard ({snake, board} as gameState) =
-  board
-
 
 -----------------------------------------------------------
 --------- DISPLAY -----------------------------------------
 -----------------------------------------------------------
 view : (Int,Int) -> GameState -> Element
-view (w,h) {board, snake} =
-  flow down (show snake :: (displayBoard board))
+view (w,h) {snake} =
+  flow down [(show snake), (displayBoard boardSize)]
 
-displayBoard : Board -> List(Element)
-displayBoard board =
-  (toList (map displayRow board))
-
-displayRow: Array(Tile) -> Element
-displayRow row =
-  flow right (toList (map displayTile row))
-
-displayTile: Tile -> Element
-displayTile tile =
-  case tile.state of
-    True ->
-        collage 20 20 ([filled (Color.rgb 0 0 200) (square 20)])
-
-    False ->
-        collage 20 20 ([filled (Color.rgb 200 200 200) (square 20)])
-
+displayBoard : Int -> Element
+displayBoard size =
+    collage size size
+      [ filled (Color.rgb 0 0 0) (square (toFloat (size // 2))) ]
 
 -----------------------------------------------------------
 --------- UTILITY -----------------------------------------
