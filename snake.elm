@@ -10,6 +10,14 @@ import List
 import Array exposing (..)
 
 -----------------------------------------------------------
+--------- CONFIG -----------------------------------------
+-----------------------------------------------------------
+gameSize = 1000    -- total gamesize squared
+pixels   = 3     -- pixels in game
+gameSpeed = 40    -- updates per second
+startingLength = 100
+
+-----------------------------------------------------------
 --------- SIGNALS -----------------------------------------
 -----------------------------------------------------------
 delta =
@@ -37,9 +45,6 @@ gameState : Signal GameState
 gameState =
   Signal.foldp stepGame defaultGame input
 
-gameSize = 800   -- total gamesize squared
-pixels   = 50    -- pixels in game
-gameSpeed = 3    -- updates per second
 
 type alias Direction = { x : Int, y : Int }
 
@@ -53,10 +58,15 @@ type alias GameState =
 
 
 defaultSnake =
-  { direction = { x = 0, y = 0 }
-  , parts = [(0,0),(1,0),(2,0),(3,0),(4,0)]
+  { direction = { x = 1, y = 0 }
+  , parts = defaultParts startingLength
   }
 
+defaultParts : Int -> List Square
+defaultParts length =
+  if | length == 0 -> []
+     | otherwise ->
+        (length - 1 - startingLength, 0) :: defaultParts (length - 1)
 
 defaultGame : GameState
 defaultGame =
@@ -124,7 +134,7 @@ renderSnake {direction, parts} =
 
 placeSegment : Square -> Form
 placeSegment (x, y) =
-  move ((toFloat (x * pixels)), (toFloat (y * pixels))) (filled (Color.rgb 255 255 255) (square (toFloat (20))))
+  move ((toFloat (x * pixels)), (toFloat (y * pixels))) (filled (Color.rgb 255 0 255) (square (toFloat (pixels))))
 -----------------------------------------------------------
 --------- UTILITY -----------------------------------------
 -----------------------------------------------------------
