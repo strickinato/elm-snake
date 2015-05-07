@@ -17,14 +17,14 @@ delta =
 
 input : Signal Input
 input =
-  Signal.map2 Input
-    Keyboard.arrows
-    delta
+  Signal.merge
+    (Signal.map Dir Keyboard.arrows)
+    (Signal.map Delta delta)
 
-type alias Input =
-  { direction : Direction
-  , timeDelta : Float
-  }
+type Input
+  = Dir Direction
+  | Delta Float
+
 
 main =
   Signal.map2 view Window.dimensions gameState
@@ -37,8 +37,9 @@ gameState : Signal GameState
 gameState =
   Signal.foldp stepGame defaultGame input
 
-gameSize = 800  -- `pixels` squared
-gameSpeed = 1    -- updates per second
+gameSize = 800   -- total gamesize squared
+pixels   = 50    -- pixels in game
+gameSpeed = 3    -- updates per second
 
 type alias Direction = { x : Int, y : Int }
 
@@ -52,8 +53,8 @@ type alias GameState =
 
 
 defaultSnake =
-  { direction = { x = 1, y = 0 }
-  , parts = [(0,0),(1,0),(2,0)]
+  { direction = { x = 0, y = 0 }
+  , parts = [(0,0),(1,0),(2,0),(3,0),(4,0)]
   }
 
 
@@ -68,40 +69,42 @@ defaultGame =
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
 stepGame : Input -> GameState -> GameState
-stepGame {timeDelta, direction} ({snake, gameSize} as gameState) =
+stepGame input ({snake, gameSize} as gameState) =
   let
-    newSnake = updateSnake direction snake
+    newSnake = updateSnake input snake
   in
     { gameState |
-        snake    <- newSnake
+        snake <- newSnake
       , gameSize <- gameSize
-      }
+    }
 
+updateSnake : Input -> Snake -> Snake
+updateSnake input snake =
+  case input of
+    Dir direction ->
+      let newDirection =
+        if direction == { x = 0, y = 0 }
+          then snake.direction
+          else direction
+      in
+        { snake | direction <- newDirection }
 
-updateSnake : Direction -> Snake -> Snake
-updateSnake direction snake =
-  let newDirection =
-    if direction == { x = 0, y = 0 }
-      then snake.direction
-      else direction
-
-      newParts = updateParts snake.direction snake.parts
-  in
-    { snake |
-        direction <- newDirection
-      , parts   <- newParts
-      }
+    Delta float ->
+      let
+        newParts = updateParts snake.direction snake.parts
+      in
+        { snake | parts <- newParts }
 
 
 updateParts : Direction -> List Square -> List Square
 updateParts direction parts =
   case parts of
     segment :: []       -> segment :: []
-    segment :: segments -> move direction segment :: segment :: init segments
+    segment :: segments -> step direction segment :: segment :: init segments
 
 
-move : Direction -> Square -> Square
-move direction square =
+step : Direction -> Square -> Square
+step direction square =
   ( fst square + direction.x
   , snd square + direction.y
   )
@@ -113,13 +116,20 @@ move direction square =
 view : (Int,Int) -> GameState -> Element
 view (w,h) {snake, gameSize} =
   collage w h
-    [ filled (Color.rgb 0 0 0) (square (toFloat (gameSize)))]
+      ((filled (Color.rgb 0 0 0) (square (toFloat (gameSize)))) :: (renderSnake snake))
 
+renderSnake : Snake -> List Form
+renderSnake {direction, parts} =
+  List.map placeSegment parts
+
+placeSegment : Square -> Form
+placeSegment (x, y) =
+  move ((toFloat (x * pixels)), (toFloat (y * pixels))) (filled (Color.rgb 255 255 255) (square (toFloat (20))))
 -----------------------------------------------------------
 --------- UTILITY -----------------------------------------
 -----------------------------------------------------------
 init : List(Square) -> List(Square)
 init squares =
   case squares of
-    square :: []   -> []
+    square :: []      -> []
     square :: squares -> square :: init squares
