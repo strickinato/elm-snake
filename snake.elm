@@ -37,8 +37,8 @@ gameState : Signal GameState
 gameState =
   Signal.foldp stepGame defaultGame input
 
-boardSize = 800  -- `pixels` squared
-gameSpeed = 1   -- updates per second
+gameSize = 800  -- `pixels` squared
+gameSpeed = 1    -- updates per second
 
 type alias Direction = { x : Int, y : Int }
 
@@ -48,7 +48,7 @@ type alias Snake =
   {direction:Direction, parts:List(Square)}
 
 type alias GameState =
-  {snake:Snake}
+  {snake:Snake, gameSize:Int}
 
 
 defaultSnake =
@@ -59,19 +59,22 @@ defaultSnake =
 
 defaultGame : GameState
 defaultGame =
-  { snake  = defaultSnake }
+  { snake = defaultSnake
+  , gameSize = gameSize
+  }
 
 
 -----------------------------------------------------------
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
 stepGame : Input -> GameState -> GameState
-stepGame {timeDelta, direction} ({snake} as gameState) =
+stepGame {timeDelta, direction} ({snake, gameSize} as gameState) =
   let
     newSnake = updateSnake direction snake
   in
     { gameState |
-        snake <- newSnake
+        snake    <- newSnake
+      , gameSize <- gameSize
       }
 
 
@@ -108,13 +111,9 @@ move direction square =
 --------- DISPLAY -----------------------------------------
 -----------------------------------------------------------
 view : (Int,Int) -> GameState -> Element
-view (w,h) {snake} =
-  flow down [(show snake), (displayBoard boardSize)]
-
-displayBoard : Int -> Element
-displayBoard size =
-    collage size size
-      [ filled (Color.rgb 0 0 0) (square (toFloat (size // 2))) ]
+view (w,h) {snake, gameSize} =
+  collage w h
+    [ filled (Color.rgb 0 0 0) (square (toFloat (gameSize)))]
 
 -----------------------------------------------------------
 --------- UTILITY -----------------------------------------
