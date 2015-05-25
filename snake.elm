@@ -2,12 +2,11 @@ import Color
 import Graphics.Collage exposing (..)
 import Graphics.Element exposing (..)
 import Keyboard
-import Signal
 import Text
 import Time exposing (..)
 import Window
-import List
 import Array exposing (..)
+import Random
 
 -----------------------------------------------------------
 --------- CONFIG ------------------------------------------
@@ -19,6 +18,7 @@ startingLength   = 100
 
 boardColor       = Color.rgb 0 0 0
 snakeColor       = Color.rgb 255 0 255
+appleColor       = Color.rgb 0 255 255
 
 
 -----------------------------------------------------------
@@ -59,14 +59,17 @@ type alias Snake =
   {direction:Direction, parts:List(Square)}
 
 type alias GameState =
-  {snake:Snake, boardSize:Float}
+  { snake:Snake
+  , boardSize:Float
+  , score:Int
+  , apple:Square
+  }
 
 
 defaultSnake : Snake
 defaultSnake =
   { direction = { x = 1, y = 0 }
-  , parts = defaultParts startingLength
-  }
+  , parts = defaultParts startingLength }
 
 
 defaultParts : Int -> List Square
@@ -80,6 +83,8 @@ defaultGame : GameState
 defaultGame =
   { snake = defaultSnake
   , boardSize = boardSize
+  , score = 0
+  , apple = placeApple
   }
 
 
@@ -87,15 +92,13 @@ defaultGame =
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
 stepGame : Input -> GameState -> GameState
-stepGame input ({snake, boardSize} as gameState) =
+stepGame input ({snake, score, apple} as gameState) = 
   let
-    newSnake = updateSnake input snake
-  in
-    { gameState |
-        snake <- newSnake
-      , boardSize <- boardSize
-    }
+    contact = collision snake apple
 
+  in
+    { gameState | snake <- updateSnake input snake
+                , score <- if contact then score + 1 else score }
 
 updateSnake : Input -> Snake -> Snake
 updateSnake input snake =
@@ -108,13 +111,12 @@ updateSnake input snake =
             else direction
       in
         { snake | direction <- newDirection }
-
+ 
     Delta _ ->
       let
         newParts = updateParts snake.direction snake.parts
       in
         { snake | parts <- newParts }
-
 
 updateParts : Direction -> List Square -> List Square
 updateParts direction parts =
@@ -129,14 +131,28 @@ step direction square =
   , snd square + direction.y
   )
 
+placeApple : Square
+placeApple =
+  (randomInt, randomInt)
+
+
+collision : Snake -> Square -> Bool
+collision snake apple =
+  let 
+    mouth = List.head snake.parts
+  in
+    case mouth of
+      Just square -> square == apple
+      Nothing -> False
+
 
 -----------------------------------------------------------
 --------- DISPLAY -----------------------------------------
 -----------------------------------------------------------
 view : (Int,Int) -> GameState -> Element
-view (w,h) {snake, boardSize} =
+view (w,h) {snake, boardSize, score, apple} =
   collage w h
-      <| renderBoard boardSize :: renderSnake snake
+      <| renderBoard boardSize :: placeSegment appleColor apple :: toForm (show score):: renderSnake snake
 
 
 renderBoard : Float -> Form
@@ -147,15 +163,14 @@ renderBoard size =
 
 renderSnake : Snake -> List Form
 renderSnake {direction, parts} =
-  List.map placeSegment parts
+  List.map (placeSegment snakeColor) parts
 
 
-placeSegment : Square -> Form
-placeSegment (x, y) =
+placeSegment : Color.Color -> Square -> Form
+placeSegment color (x, y) =
   move (scaled x, scaled y)
-    <| filled snakeColor
-    <| square (scaled 1)
-
+    <| filled color
+    <| square (scaled 5)
 
 -----------------------------------------------------------
 --------- UTILITY -----------------------------------------
@@ -170,3 +185,11 @@ scaled : Int -> Float
 scaled x =
   toFloat (x * scale)
 
+seed0 = Random.initialSeed 14
+
+randomInt : Int
+randomInt =
+  let
+    generator = Random.int -100 100
+  in
+    fst(Random.generate generator seed0)
