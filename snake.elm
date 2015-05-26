@@ -12,13 +12,14 @@ import Random
 --------- CONFIG ------------------------------------------
 -----------------------------------------------------------
 boardSize        = 700
-scale            = 12
-frameSpeed       = 30
+scale            = 10
+frameSpeed       = 15
 startingLength   = 10
-startingApples   = 3
+startingApples   = 25
 
 boardColor       = Color.rgb 0 0 0
 snakeColor       = Color.rgb 255 0 255
+snake2Color      = Color.rgb 0 0 255
 appleColor       = Color.rgb 0 255 255
 
 
@@ -32,7 +33,9 @@ main =
 input : Signal Input
 input =
   Signal.merge
-    (Signal.map Dir Keyboard.arrows)
+    (Signal.merge
+      (Signal.map Dir Keyboard.arrows)
+      (Signal.map Dir2 Keyboard.wasd))
     (Signal.map Delta delta)
 
 
@@ -50,6 +53,7 @@ gameState =
 
 type Input
   = Dir Direction
+  | Dir2 Direction
   | Delta Float
 
 type Chomp
@@ -63,25 +67,32 @@ type alias Direction = { x : Int, y : Int }
 type alias Square = (Int, Int)
 
 type alias Snake =
-  {direction:Direction, parts:List(Square), chomp:Chomp}
+  { direction:Direction
+  , parts:List(Square)
+  , chomp:Chomp
+  , score:Int
+  , color:Color.Color
+  }
 
 type alias Apple =
-  {square:Square, seed:Random.Seed}
+  {square:Square, seed:Random.Seed, owner:Maybe Snake}
 
 type alias GameState =
   { snake:Snake
+  , snake2:Snake
   , boardSize:Float
-  , score:Int
   , apples:List Apple
   }
 
 --port startTime : Int
 
-defaultSnake : Snake
-defaultSnake =
-  { direction = { x = 1, y = 0 }
-  , parts = defaultParts startingLength
+defaultSnake : Int -> Color.Color -> Snake
+defaultSnake dir color=
+  { direction = { x = 0 , y = dir }
+  , parts = List.map (\(x,y) -> (x * dir, y)) (defaultParts startingLength)
   , chomp = Air
+  , score = 0
+  , color = color
   }
 
 
@@ -94,7 +105,7 @@ defaultApples length =
 
 appleConstructor : Int -> Apple
 appleConstructor x =
-  {square = (x, x), seed = Random.initialSeed x }
+  {square = (x, x), seed = Random.initialSeed x, owner = Nothing }
 
 
 defaultParts : Int -> List Square
@@ -106,44 +117,77 @@ defaultParts length =
 
 defaultGame : GameState
 defaultGame =
-  { snake = defaultSnake
+  { snake = defaultSnake -1 snakeColor
+  , snake2 = defaultSnake 1 snake2Color
   , boardSize = boardSize
-  , score = 0
   , apples = defaultApples startingApples
   }
 
 
-scalar : Int
-scalar = (boardSize // scale) // 2
+range : Int
+range = ((boardSize // scale ) // 2)
+
+
+placeApple : Apple -> Apple
+placeApple apple =
+  let
+    (x, seed')  = Random.generate (Random.int -range range) apple.seed
+    (y, seed'') = Random.generate (Random.int -range range) seed'
+  in
+    { square = (x,y), seed = seed'', owner = apple.owner}
+
 
 -----------------------------------------------------------
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
 stepGame : Input -> GameState -> GameState
-stepGame input ({snake, score, apples, boardSize} as gameState) =
+stepGame input ({snake, snake2, apples, boardSize} as gameState) =
   case input of
     Dir direction ->
-      { gameState | snake <- updateDirection direction snake }
+      { gameState | snake <- updateSnakeDirection direction snake }
+
+    Dir2 direction ->
+      { gameState | snake2 <- updateSnakeDirection direction snake2 }
 
     Delta _ ->
-      let
-        snakeState = checkSnake gameState
-      in case snakeState of
-          Air ->
-            { gameState | snake <- stepSnake snake }
-          Food ->
-            { gameState | snake <- eatingSnake snake
-                        , score <- score + 1
-                        , apples <- List.map (\a -> if collision snake a.square then placeApple a else a) apples
-            }
-          Tail ->
-            gameState
-          Border ->
-            gameState
+      { gameState | snake <-  updateSnake snake gameState
+                  , snake2 <- updateSnake snake2 gameState
+                  , apples <- checkForSteals gameState
+      }
 
+checkForSteals : GameState -> List Apple
+checkForSteals {apples, snake, snake2} =
+  List.map (gettingEaten snake snake2) apples
 
-updateDirection : Direction -> Snake -> Snake
-updateDirection ({x, y} as direction) snake =
+-- If both snakes eat at the exact same time... what should happen?
+gettingEaten : Snake -> Snake -> Apple -> Apple
+gettingEaten snake snake2 apple =
+  if | collision snake apple.square  -> stealApple snake apple
+     | collision snake2 apple.square -> stealApple snake2 apple
+     | otherwise                     -> apple
+  
+
+stealApple : Snake -> Apple -> Apple
+stealApple snake apple =
+  { apple | owner <- Just snake }
+
+updateSnake : Snake -> GameState -> Snake
+updateSnake snake gameState =
+  let
+    snakeState = checkSnakeStatus snake gameState
+
+  in case snakeState of
+      Air ->
+        movingSnake snake
+      Food ->
+        eatingSnake snake
+      Tail ->
+        snake
+      Border ->
+        snake
+
+updateSnakeDirection : Direction -> Snake -> Snake
+updateSnakeDirection ({x, y} as direction) snake =
   let
     current = snake.direction
   in
@@ -152,11 +196,11 @@ updateDirection ({x, y} as direction) snake =
        | otherwise -> { snake | direction <- direction }
 
 
-
-checkSnake : GameState -> Chomp
-checkSnake ({snake, score, apples} as gameState) =
+checkSnakeStatus : Snake -> GameState -> Chomp
+checkSnakeStatus snake ({apples} as gameState) =
   let
     snakeTail = ensureListTail snake.parts
+
   in
     if | List.any (collision snake) (List.map (\a -> a.square) apples) -> Food
        | List.any (collision snake) snakeTail -> Tail
@@ -165,28 +209,25 @@ checkSnake ({snake, score, apples} as gameState) =
 
 outsideBorder : Square -> Bool
 outsideBorder (x, y) =
-  (abs x >= abs scalar) || (abs y >= abs scalar)
-
-changeSnakeDirection : Snake -> Direction -> Snake
-changeSnakeDirection snake newDirection =
-  { snake | direction <- newDirection }
+  (abs x >= abs range) || (abs y >= abs range)
 
 
-stepSnake : Snake -> Snake
-stepSnake snake =
-  { snake | parts <- moveParts snake.direction snake.parts False }
+movingSnake : Snake -> Snake
+movingSnake snake =
+  { snake | parts <- moveSnakeParts snake.direction snake.parts False }
 
 
 eatingSnake : Snake -> Snake
 eatingSnake snake =
-  { snake | parts <- moveParts snake.direction snake.parts True }
+  { snake | parts <- moveSnakeParts snake.direction snake.parts True }
 
 
-moveParts : Direction -> List Square -> Bool -> List Square
-moveParts direction parts eating =
+moveSnakeParts : Direction -> List Square -> Bool -> List Square
+moveSnakeParts direction parts eating =
   case parts of
     head :: []   -> step direction head :: []
     head :: tail -> step direction head :: head :: if eating then tail else init tail
+
 
 
 step : Direction -> Square -> Square
@@ -194,16 +235,6 @@ step direction square =
   ( fst square + direction.x
   , snd square + direction.y
   )
-
-
-placeApple : Apple -> Apple
-placeApple apple =
-  let
-    range = boardSize // (scale * 2)
-    (x, seed')  = Random.generate (Random.int -10 10) apple.seed
-    (y, seed'') = Random.generate (Random.int -10 10) seed'
-  in
-    { square = (x,y), seed = seed'' }
 
 
 collision : Snake -> Square -> Bool
@@ -219,9 +250,9 @@ collision snake square =
 --------- DISPLAY -----------------------------------------
 -----------------------------------------------------------
 view : (Int,Int) -> GameState -> Element
-view (w,h) {snake, boardSize, score, apples} =
+view (w,h) {snake, snake2, boardSize, apples} =
   collage w h
-    <| renderScore score :: renderBoard boardSize :: (List.append (renderSquares (List.map (\a -> a.square) apples) appleColor) (renderSquares snake.parts snakeColor))
+    <| renderScore snake.score :: renderScore snake2.score :: renderBoard boardSize :: List.append (List.append (renderApples apples) (renderSquares snake.parts snakeColor)) ((renderSquares snake2.parts snake2Color))
 
 renderScore : Int -> Form
 renderScore score =
@@ -234,6 +265,15 @@ renderBoard size =
   filled boardColor
     <| square size
 
+renderApples : List Apple -> List Form
+renderApples apples =
+  List.map (\a -> placeSegment (ownerColor a) a.square) apples
+
+ownerColor : Apple -> Color.Color
+ownerColor apple =
+  case apple.owner of
+    Just snake -> snake.color
+    Nothing -> appleColor
 
 renderSquares : List Square -> Color.Color -> List Form
 renderSquares squares color =
@@ -260,9 +300,9 @@ scaled x =
   toFloat (x * scale)
 
 ensureListTail : List a -> List a
-ensureListTail tail =
+ensureListTail list =
   let
-    maybeTail = List.tail tail
+    maybeTail = List.tail list
   in
     case maybeTail of
       Just tail -> tail
