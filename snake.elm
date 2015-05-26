@@ -52,12 +52,18 @@ type Input
   = Dir Direction
   | Delta Float
 
+type Chomp
+  = Food
+  | Tail
+  | Border
+  | Air
+
 type alias Direction = { x : Int, y : Int }
 
 type alias Square = (Int, Int)
 
 type alias Snake =
-  {direction:Direction, parts:List(Square)}
+  {direction:Direction, parts:List(Square), chomp:Chomp}
 
 type alias Apple =
   {square:Square, seed:Random.Seed}
@@ -69,12 +75,14 @@ type alias GameState =
   , apple:Apple
   }
 
-port startTime : Int
+--port startTime : Int
 
 defaultSnake : Snake
 defaultSnake =
   { direction = { x = 1, y = 0 }
-  , parts = defaultParts startingLength }
+  , parts = defaultParts startingLength
+  , chomp = Air
+  }
 
 
 defaultParts : Int -> List Square
@@ -89,7 +97,7 @@ defaultGame =
   { snake = defaultSnake
   , boardSize = boardSize
   , score = 0
-  , apple = {square = (10, 20), seed = Random.initialSeed startTime }
+  , apple = {square = (10, 20), seed = Random.initialSeed 20 }
   }
 
 
@@ -98,36 +106,68 @@ defaultGame =
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
 stepGame : Input -> GameState -> GameState
-stepGame input ({snake, score, apple} as gameState) = 
-  let
-    appleContact = collision snake apple
-
-  in
-    { gameState | snake <- updateSnake input snake appleContact
-                , score <- if appleContact then score + 1 else score
-                , apple <- if appleContact then placeApple apple else apple
-                }
-
-updateSnake : Input -> Snake -> Bool -> Snake
-updateSnake input snake contact =
+stepGame input ({snake, score, apple, boardSize} as gameState) =
   case input of
     Dir direction ->
-      let
-        newDirection =
-          if direction == { x = 0, y = 0 }
-            then snake.direction
-            else direction
-      in
-        { snake | direction <- newDirection }
- 
-    Delta _ ->
-      { snake | parts <- moveParts snake.direction contact snake.parts}
+      { gameState | snake <- updateDirection direction snake }
 
-moveParts : Direction -> Bool -> List Square -> List Square
-moveParts direction contact parts =
+    Delta _ ->
+      let
+        snakeState = checkSnake gameState
+      in case snakeState of
+          Air ->
+            { gameState | snake <- stepSnake snake }
+          Food ->
+            { gameState | snake <- eatingSnake snake
+                        , score <- score + 1
+                        , apple <- placeApple apple
+            }
+          Tail ->
+            gameState
+          Border ->
+            gameState
+
+
+updateDirection : Direction -> Snake -> Snake
+updateDirection ({x, y} as direction) snake =
+  let
+    current = snake.direction
+  in
+    if | direction == {x = 0, y = 0} -> snake
+       | direction == {x = -current.x, y = -current.y} -> snake
+       | (abs x) + (abs y) > 1 -> snake
+       | otherwise -> { snake | direction <- direction }
+
+
+checkSnake : GameState -> Chomp
+checkSnake ({snake, score, apple} as gameState) =
+  let
+    snakeTail = ensureListTail snake.parts
+
+  in
+    if | collision snake apple.square -> Food
+       | List.any (collision snake) snakeTail -> Tail
+       | otherwise -> Air
+
+changeSnakeDirection : Snake -> Direction -> Snake
+changeSnakeDirection snake newDirection =
+  { snake | direction <- newDirection }
+
+stepSnake : Snake -> Snake
+stepSnake snake =
+  { snake | parts <- moveParts snake.direction snake.parts False }
+
+
+eatingSnake : Snake -> Snake
+eatingSnake snake =
+  { snake | parts <- moveParts snake.direction snake.parts True }
+
+
+moveParts : Direction -> List Square -> Bool -> List Square
+moveParts direction parts eating =
   case parts of
-    segment :: []       -> step direction segment :: []
-    segment :: segments -> step direction segment :: segment :: if contact then segments else init segments
+    head :: []       -> step direction head :: []
+    head :: tail -> step direction head :: head :: if eating then tail else init tail
 
 
 step : Direction -> Square -> Square
@@ -136,14 +176,6 @@ step direction square =
   , snd square + direction.y
   )
 
-collision : Snake -> Apple -> Bool
-collision snake apple =
-  let 
-    mouth = List.head snake.parts
-  in
-    case mouth of
-      Just square -> square == apple.square
-      Nothing -> False
 
 placeApple : Apple -> Apple
 placeApple apple =
@@ -154,6 +186,15 @@ placeApple apple =
   in
     { square = (x,y), seed = seed'' }
 
+
+collision : Snake -> Square -> Bool
+collision snake square =
+  let 
+    mouth = List.head snake.parts
+  in
+    case mouth of
+      Just chomp -> chomp == square
+      Nothing -> False
 
 -----------------------------------------------------------
 --------- DISPLAY -----------------------------------------
@@ -189,12 +230,21 @@ placeSegment color (x, y) =
 -----------------------------------------------------------
 --------- UTILITY -----------------------------------------
 -----------------------------------------------------------
-init : List Square -> List Square
-init squares =
-  case squares of
-    square :: []      -> []
-    square :: squares -> square :: init squares
+init : List a -> List a
+init list =
+  case list of
+    head :: []   -> []
+    head :: tail -> head :: init tail
 
 scaled : Int -> Float
 scaled x =
   toFloat (x * scale)
+
+ensureListTail : List a -> List a
+ensureListTail tail =
+  let
+    maybeTail = List.tail tail
+  in
+    case maybeTail of
+      Just tail -> tail
+      Nothing -> []
