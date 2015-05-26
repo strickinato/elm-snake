@@ -12,10 +12,10 @@ import Random
 --------- CONFIG ------------------------------------------
 -----------------------------------------------------------
 boardSize        = 700
-scale            = 10
-frameSpeed       = 20
-snakeSpeed       = 2
+scale            = 12
+frameSpeed       = 30
 startingLength   = 10
+startingApples   = 3
 
 boardColor       = Color.rgb 0 0 0
 snakeColor       = Color.rgb 255 0 255
@@ -72,7 +72,7 @@ type alias GameState =
   { snake:Snake
   , boardSize:Float
   , score:Int
-  , apple:Apple
+  , apples:List Apple
   }
 
 --port startTime : Int
@@ -83,6 +83,18 @@ defaultSnake =
   , parts = defaultParts startingLength
   , chomp = Air
   }
+
+
+defaultApples : Int -> List Apple
+defaultApples length =
+  if length == 0
+    then []
+    else placeApple (appleConstructor length) :: defaultApples (length - 1)
+
+
+appleConstructor : Int -> Apple
+appleConstructor x =
+  {square = (x, x), seed = Random.initialSeed x }
 
 
 defaultParts : Int -> List Square
@@ -97,16 +109,18 @@ defaultGame =
   { snake = defaultSnake
   , boardSize = boardSize
   , score = 0
-  , apple = {square = (10, 20), seed = Random.initialSeed 20 }
+  , apples = defaultApples startingApples
   }
 
 
+scalar : Int
+scalar = (boardSize // scale) // 2
 
 -----------------------------------------------------------
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
 stepGame : Input -> GameState -> GameState
-stepGame input ({snake, score, apple, boardSize} as gameState) =
+stepGame input ({snake, score, apples, boardSize} as gameState) =
   case input of
     Dir direction ->
       { gameState | snake <- updateDirection direction snake }
@@ -120,7 +134,7 @@ stepGame input ({snake, score, apple, boardSize} as gameState) =
           Food ->
             { gameState | snake <- eatingSnake snake
                         , score <- score + 1
-                        , apple <- placeApple apple
+                        , apples <- List.map (\a -> if collision snake a.square then placeApple a else a) apples
             }
           Tail ->
             gameState
@@ -135,23 +149,28 @@ updateDirection ({x, y} as direction) snake =
   in
     if | direction == {x = 0, y = 0} -> snake
        | direction == {x = -current.x, y = -current.y} -> snake
-       | (abs x) + (abs y) > 1 -> snake
        | otherwise -> { snake | direction <- direction }
 
 
+
 checkSnake : GameState -> Chomp
-checkSnake ({snake, score, apple} as gameState) =
+checkSnake ({snake, score, apples} as gameState) =
   let
     snakeTail = ensureListTail snake.parts
-
   in
-    if | collision snake apple.square -> Food
+    if | List.any (collision snake) (List.map (\a -> a.square) apples) -> Food
        | List.any (collision snake) snakeTail -> Tail
+       | List.any (outsideBorder) snake.parts -> Border
        | otherwise -> Air
+
+outsideBorder : Square -> Bool
+outsideBorder (x, y) =
+  (abs x >= abs scalar) || (abs y >= abs scalar)
 
 changeSnakeDirection : Snake -> Direction -> Snake
 changeSnakeDirection snake newDirection =
   { snake | direction <- newDirection }
+
 
 stepSnake : Snake -> Snake
 stepSnake snake =
@@ -166,7 +185,7 @@ eatingSnake snake =
 moveParts : Direction -> List Square -> Bool -> List Square
 moveParts direction parts eating =
   case parts of
-    head :: []       -> step direction head :: []
+    head :: []   -> step direction head :: []
     head :: tail -> step direction head :: head :: if eating then tail else init tail
 
 
@@ -181,7 +200,7 @@ placeApple : Apple -> Apple
 placeApple apple =
   let
     range = boardSize // (scale * 2)
-    (x, seed') = Random.generate (Random.int -10 10) apple.seed
+    (x, seed')  = Random.generate (Random.int -10 10) apple.seed
     (y, seed'') = Random.generate (Random.int -10 10) seed'
   in
     { square = (x,y), seed = seed'' }
@@ -194,15 +213,15 @@ collision snake square =
   in
     case mouth of
       Just chomp -> chomp == square
-      Nothing -> False
+      Nothing    -> False
 
 -----------------------------------------------------------
 --------- DISPLAY -----------------------------------------
 -----------------------------------------------------------
 view : (Int,Int) -> GameState -> Element
-view (w,h) {snake, boardSize, score, apple} =
+view (w,h) {snake, boardSize, score, apples} =
   collage w h
-      <| renderScore score :: renderBoard boardSize :: placeSegment appleColor apple.square :: renderSnake snake
+    <| renderScore score :: renderBoard boardSize :: (List.append (renderSquares (List.map (\a -> a.square) apples) appleColor) (renderSquares snake.parts snakeColor))
 
 renderScore : Int -> Form
 renderScore score =
@@ -216,9 +235,9 @@ renderBoard size =
     <| square size
 
 
-renderSnake : Snake -> List Form
-renderSnake {direction, parts} =
-  List.map (placeSegment snakeColor) parts
+renderSquares : List Square -> Color.Color -> List Form
+renderSquares squares color =
+  List.map (placeSegment color) squares
 
 
 placeSegment : Color.Color -> Square -> Form
