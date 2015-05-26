@@ -11,10 +11,11 @@ import Random
 -----------------------------------------------------------
 --------- CONFIG ------------------------------------------
 -----------------------------------------------------------
-boardSize        = 1000
-scale            = 3
-gameSpeed        = 40
-startingLength   = 100
+boardSize        = 700
+scale            = 10
+frameSpeed       = 20
+snakeSpeed       = 2
+startingLength   = 10
 
 boardColor       = Color.rgb 0 0 0
 snakeColor       = Color.rgb 255 0 255
@@ -37,7 +38,7 @@ input =
 
 delta : Signal Float
 delta =
-  Signal.map inSeconds (fps gameSpeed)
+  Signal.map inSeconds (fps frameSpeed)
 
 
 -----------------------------------------------------------
@@ -58,13 +59,17 @@ type alias Square = (Int, Int)
 type alias Snake =
   {direction:Direction, parts:List(Square)}
 
+type alias Apple =
+  {square:Square, seed:Random.Seed}
+
 type alias GameState =
   { snake:Snake
   , boardSize:Float
   , score:Int
-  , apple:Square
+  , apple:Apple
   }
 
+port startTime : Int
 
 defaultSnake : Snake
 defaultSnake =
@@ -84,8 +89,9 @@ defaultGame =
   { snake = defaultSnake
   , boardSize = boardSize
   , score = 0
-  , apple = placeApple
+  , apple = {square = (10, 20), seed = Random.initialSeed startTime }
   }
+
 
 
 -----------------------------------------------------------
@@ -94,14 +100,16 @@ defaultGame =
 stepGame : Input -> GameState -> GameState
 stepGame input ({snake, score, apple} as gameState) = 
   let
-    contact = collision snake apple
+    appleContact = collision snake apple
 
   in
-    { gameState | snake <- updateSnake input snake
-                , score <- if contact then score + 1 else score }
+    { gameState | snake <- updateSnake input snake appleContact
+                , score <- if appleContact then score + 1 else score
+                , apple <- if appleContact then placeApple apple else apple
+                }
 
-updateSnake : Input -> Snake -> Snake
-updateSnake input snake =
+updateSnake : Input -> Snake -> Bool -> Snake
+updateSnake input snake contact =
   case input of
     Dir direction ->
       let
@@ -113,16 +121,13 @@ updateSnake input snake =
         { snake | direction <- newDirection }
  
     Delta _ ->
-      let
-        newParts = updateParts snake.direction snake.parts
-      in
-        { snake | parts <- newParts }
+      { snake | parts <- moveParts snake.direction contact snake.parts}
 
-updateParts : Direction -> List Square -> List Square
-updateParts direction parts =
+moveParts : Direction -> Bool -> List Square -> List Square
+moveParts direction contact parts =
   case parts of
-    segment :: []       -> segment :: []
-    segment :: segments -> step direction segment :: segment :: init segments
+    segment :: []       -> step direction segment :: []
+    segment :: segments -> step direction segment :: segment :: if contact then segments else init segments
 
 
 step : Direction -> Square -> Square
@@ -131,19 +136,23 @@ step direction square =
   , snd square + direction.y
   )
 
-placeApple : Square
-placeApple =
-  (randomInt, randomInt)
-
-
-collision : Snake -> Square -> Bool
+collision : Snake -> Apple -> Bool
 collision snake apple =
   let 
     mouth = List.head snake.parts
   in
     case mouth of
-      Just square -> square == apple
+      Just square -> square == apple.square
       Nothing -> False
+
+placeApple : Apple -> Apple
+placeApple apple =
+  let
+    range = boardSize // (scale * 2)
+    (x, seed') = Random.generate (Random.int -10 10) apple.seed
+    (y, seed'') = Random.generate (Random.int -10 10) seed'
+  in
+    { square = (x,y), seed = seed'' }
 
 
 -----------------------------------------------------------
@@ -152,8 +161,13 @@ collision snake apple =
 view : (Int,Int) -> GameState -> Element
 view (w,h) {snake, boardSize, score, apple} =
   collage w h
-      <| renderBoard boardSize :: placeSegment appleColor apple :: toForm (show score):: renderSnake snake
+      <| renderScore score :: renderBoard boardSize :: placeSegment appleColor apple.square :: renderSnake snake
 
+renderScore : Int -> Form
+renderScore score =
+  move (0,(boardSize / 2) + 10)
+    <| toForm (show score)
+  
 
 renderBoard : Float -> Form
 renderBoard size =
@@ -170,7 +184,7 @@ placeSegment : Color.Color -> Square -> Form
 placeSegment color (x, y) =
   move (scaled x, scaled y)
     <| filled color
-    <| square (scaled 5)
+    <| square (scaled 1)
 
 -----------------------------------------------------------
 --------- UTILITY -----------------------------------------
@@ -184,12 +198,3 @@ init squares =
 scaled : Int -> Float
 scaled x =
   toFloat (x * scale)
-
-seed0 = Random.initialSeed 14
-
-randomInt : Int
-randomInt =
-  let
-    generator = Random.int -100 100
-  in
-    fst(Random.generate generator seed0)
