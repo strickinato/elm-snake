@@ -84,7 +84,7 @@ type alias GameState =
   , apples:List Apple
   }
 
---port startTime : Int
+port startTime : Int
 
 defaultSnake : Int -> Color.Color -> Snake
 defaultSnake dir color=
@@ -100,7 +100,7 @@ defaultApples : Int -> List Apple
 defaultApples length =
   if length == 0
     then []
-    else placeApple (appleConstructor length) :: defaultApples (length - 1)
+    else placeApple (appleConstructor (startTime * length)) :: defaultApples (length - 1)
 
 
 appleConstructor : Int -> Apple
@@ -125,7 +125,7 @@ defaultGame =
 
 
 range : Int
-range = ((boardSize // scale ) // 2)
+range = (boardSize // (scale * 2)) - 1
 
 
 placeApple : Apple -> Apple
