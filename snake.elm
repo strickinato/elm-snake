@@ -16,6 +16,7 @@ scale            = 10
 frameSpeed       = 15
 startingLength   = 10
 startingApples   = 25
+gameLength       = 40
 
 boardColor       = Color.rgb 0 0 0
 snakeColor       = Color.rgb 255 0 255
@@ -65,6 +66,10 @@ type Chomp
   | Border
   | Air
 
+type State
+  = Playing
+  | Waiting
+
 type alias Direction = { x : Int, y : Int }
 
 type alias Square = (Int, Int)
@@ -73,8 +78,8 @@ type alias Snake =
   { direction:Direction
   , parts:List(Square)
   , chomp:Chomp
-  , score:Int
   , color:Color.Color
+  , id:Int
   }
 
 type alias Apple =
@@ -88,6 +93,8 @@ type alias GameState =
   , snake2:Snake
   , boardSize:Float
   , apples:List Apple
+  , time: Int
+  , state: State
   }
 
 
@@ -96,8 +103,8 @@ defaultSnake dir color=
   { direction = { x = 0 , y = dir }
   , parts = List.map (\(x,y) -> (x * dir, y)) (defaultParts startingLength)
   , chomp = Air
-  , score = 0
   , color = color
+  , id = dir
   }
 
 
@@ -138,6 +145,8 @@ defaultGame =
   , snake2 = defaultSnake 1 snake2Color
   , boardSize = boardSize
   , apples = defaultApples startingApples
+  , time = gameLength * frameSpeed
+  , state = Playing
   }
 
 
@@ -154,19 +163,27 @@ outsideBorder (x, y) =
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
 stepGame : Input -> GameState -> GameState
-stepGame input ({snake, snake2, apples, boardSize} as gameState) =
-  case input of
-    Dir direction ->
-      { gameState | snake <- updateSnakeDirection direction snake }
+stepGame input ({snake, snake2, time} as gameState) =
+  if time > 0 then
+    case input of
+      Dir direction ->
+        { gameState | snake <- updateSnakeDirection direction snake
+                    , time  <- (\t -> t - 1) time
+        }
 
-    Dir2 direction ->
-      { gameState | snake2 <- updateSnakeDirection direction snake2 }
+      Dir2 direction ->
+        { gameState | snake2 <- updateSnakeDirection direction snake2
+                    , time  <- (\t -> t - 1) time
+        }
 
-    Delta _ ->
-      { gameState | snake  <- updateSnake snake gameState
-                  , snake2 <- updateSnake snake2 gameState
-                  , apples <- checkForSteals gameState
-      }
+      Delta _ ->
+        { gameState | snake  <- updateSnake snake gameState
+                    , snake2 <- updateSnake snake2 gameState
+                    , apples <- checkForSteals gameState
+                    , time  <- (\t -> t - 1) time
+        }
+  else
+    gameState
 
 
 updateSnake : Snake -> GameState -> Snake
@@ -258,18 +275,34 @@ collision snake square =
       Just chomp -> chomp == square
       Nothing    -> False
 
+scoreFor : Snake -> List Apple -> Int
+scoreFor snake apples =
+  List.length (List.filterMap (\n -> isSnake n.owner snake ) apples)
+
+isSnake : Maybe Snake -> Snake -> Maybe Snake
+isSnake owner snake =
+  case owner of
+    Just owner -> if owner.id == snake.id then Just owner else Nothing
+    Nothing    -> Nothing
+
 -----------------------------------------------------------
 --------- DISPLAY -----------------------------------------
 -----------------------------------------------------------
 view : (Int,Int) -> GameState -> Element
 view (w,h) {snake, snake2, boardSize, apples} =
   collage w h --Something must be done about this beheamoth
-    <| renderScore snake.score :: renderScore snake2.score :: renderBoard boardSize :: List.append (List.append (renderApples apples) (renderSquares snake.parts snakeColor)) ((renderSquares snake2.parts snake2Color))
+    <| renderScore (scoreFor snake apples) 1 :: renderScore (scoreFor snake2 apples) 2 :: renderBoard boardSize :: List.append (List.append (renderApples apples) (renderSquares snake.parts snakeColor)) ((renderSquares snake2.parts snake2Color))
 
-renderScore : Int -> Form
-renderScore score =
-  move (0,(boardSize / 2) + 10)
-    <| toForm (show score)
+renderScore : Int -> Int -> Form
+renderScore score player =
+  let
+    offset =
+      case player of
+        1 -> -50
+        2 -> 50
+    in
+      move (offset, (boardSize / 2) + 10)
+        <| toForm (show score)
   
 
 renderBoard : Float -> Form
