@@ -3218,8 +3218,24 @@ Elm.Main.make = function (_elm) {
    $Maybe = Elm.Maybe.make(_elm),
    $Random = Elm.Random.make(_elm),
    $Signal = Elm.Signal.make(_elm),
+   $String = Elm.String.make(_elm),
+   $Text = Elm.Text.make(_elm),
    $Time = Elm.Time.make(_elm),
    $Window = Elm.Window.make(_elm);
+   var timeFormat = function (time) {
+      return function () {
+         var seconds = A2($Basics._op["%"],
+         time,
+         60);
+         var minutes = time / 60 | 0;
+         return _U.cmp(seconds,
+         10) > -1 ? $String.concat(_L.fromArray([$Basics.toString(minutes)
+                                                ,":"
+                                                ,$Basics.toString(seconds)])) : $String.concat(_L.fromArray([$Basics.toString(minutes)
+                                                                                                            ,":0"
+                                                                                                            ,$Basics.toString(seconds)]));
+      }();
+   };
    var ensureListTail = function (list) {
       return function () {
          var maybeTail = $List.tail(list);
@@ -3230,11 +3246,11 @@ Elm.Main.make = function (_elm) {
                case "Nothing":
                return _L.fromArray([]);}
             _U.badCase($moduleName,
-            "between lines 307 and 309");
+            "between lines 404 and 406");
          }();
       }();
    };
-   var init = function (list) {
+   var chopped = function (list) {
       return function () {
          switch (list.ctor)
          {case "::":
@@ -3243,9 +3259,52 @@ Elm.Main.make = function (_elm) {
                  return _L.fromArray([]);}
               return A2($List._op["::"],
               list._0,
-              init(list._1));}
+              chopped(list._1));}
          _U.badCase($moduleName,
-         "between lines 294 and 296");
+         "between lines 389 and 391");
+      }();
+   };
+   var renderScore = F2(function (score,
+   offset) {
+      return $Graphics$Collage.move({ctor: "_Tuple2"
+                                    ,_0: offset
+                                    ,_1: 0})($Graphics$Collage.text($Text.monospace($Text.height(36)($Text.fromString($Basics.toString(score))))));
+   });
+   var isSnake = F2(function (owner,
+   snake) {
+      return function () {
+         switch (owner.ctor)
+         {case "Just":
+            return _U.eq(owner._0.id,
+              snake.id) ? $Maybe.Just(owner._0) : $Maybe.Nothing;
+            case "Nothing":
+            return $Maybe.Nothing;}
+         _U.badCase($moduleName,
+         "between lines 285 and 287");
+      }();
+   });
+   var scoreFor = F2(function (snake,
+   apples) {
+      return $List.length(A2($List.filterMap,
+      function (n) {
+         return A2(isSnake,
+         n.owner,
+         snake);
+      },
+      apples));
+   });
+   var renderScores = function (_v7) {
+      return function () {
+         return _L.fromArray([A2(renderScore,
+                             A2(scoreFor,
+                             _v7.snake,
+                             _v7.apples),
+                             -1 * (_v7.boardSize / 2 + 100))
+                             ,A2(renderScore,
+                             A2(scoreFor,
+                             _v7.snake2,
+                             _v7.apples),
+                             _v7.boardSize / 2 + 100)]);
       }();
    };
    var collision = F2(function (snake,
@@ -3258,66 +3317,7 @@ Elm.Main.make = function (_elm) {
                return _U.eq(mouth._0,square);
                case "Nothing": return false;}
             _U.badCase($moduleName,
-            "between lines 245 and 247");
-         }();
-      }();
-   });
-   var step = F2(function (direction,
-   square) {
-      return {ctor: "_Tuple2"
-             ,_0: $Basics.fst(square) + direction.x
-             ,_1: $Basics.snd(square) + direction.y};
-   });
-   var moveSnakeParts = F3(function (direction,
-   parts,
-   eating) {
-      return function () {
-         switch (parts.ctor)
-         {case "::":
-            switch (parts._1.ctor)
-              {case "[]":
-                 return A2($List._op["::"],
-                   A2(step,direction,parts._0),
-                   _L.fromArray([]));}
-              return A2($List._op["::"],
-              A2(step,direction,parts._0),
-              A2($List._op["::"],
-              parts._0,
-              eating ? parts._1 : init(parts._1)));}
-         _U.badCase($moduleName,
-         "between lines 227 and 229");
-      }();
-   });
-   var eatingSnake = function (snake) {
-      return _U.replace([["parts"
-                         ,A3(moveSnakeParts,
-                         snake.direction,
-                         snake.parts,
-                         true)]],
-      snake);
-   };
-   var movingSnake = function (snake) {
-      return _U.replace([["parts"
-                         ,A3(moveSnakeParts,
-                         snake.direction,
-                         snake.parts,
-                         false)]],
-      snake);
-   };
-   var updateSnakeDirection = F2(function (_v10,
-   snake) {
-      return function () {
-         return function () {
-            var current = snake.direction;
-            return _U.eq(_v10,
-            {_: {}
-            ,x: 0
-            ,y: 0}) ? snake : _U.eq(_v10,
-            {_: {}
-            ,x: 0 - current.x
-            ,y: 0 - current.y}) ? snake : _U.replace([["direction"
-                                                      ,_v10]],
-            snake);
+            "between lines 274 and 276");
          }();
       }();
    });
@@ -3340,15 +3340,72 @@ Elm.Main.make = function (_elm) {
       snake2,
       apple) : apple;
    });
-   var checkForSteals = function (_v12) {
+   var checkForSteals = function (_v11) {
       return function () {
          return A2($List.map,
          A2(gettingEaten,
-         _v12.snake,
-         _v12.snake2),
-         _v12.apples);
+         _v11.snake,
+         _v11.snake2),
+         _v11.apples);
       }();
    };
+   var step = F2(function (direction,
+   square) {
+      return {ctor: "_Tuple2"
+             ,_0: $Basics.fst(square) + direction.x
+             ,_1: $Basics.snd(square) + direction.y};
+   });
+   var moveSnakeParts = F3(function (direction,
+   parts,
+   eating) {
+      return function () {
+         switch (parts.ctor)
+         {case "::":
+            switch (parts._1.ctor)
+              {case "[]":
+                 return A2($List._op["::"],
+                   A2(step,direction,parts._0),
+                   _L.fromArray([]));}
+              return A2($List._op["::"],
+              A2(step,direction,parts._0),
+              A2($List._op["::"],
+              parts._0,
+              eating ? parts._1 : chopped(parts._1)));}
+         _U.badCase($moduleName,
+         "between lines 239 and 241");
+      }();
+   });
+   var eatingSnake = function (snake) {
+      return _U.replace([["parts"
+                         ,A3(moveSnakeParts,
+                         snake.direction,
+                         snake.parts,
+                         true)]],
+      snake);
+   };
+   var movingSnake = function (snake) {
+      return _U.replace([["parts"
+                         ,A3(moveSnakeParts,
+                         snake.direction,
+                         snake.parts,
+                         false)]],
+      snake);
+   };
+   var updateSnakeDirection = F2(function (direction,
+   snake) {
+      return function () {
+         var current = snake.direction;
+         return _U.eq(direction,
+         {_: {}
+         ,x: 0
+         ,y: 0}) ? snake : _U.eq(direction,
+         {_: {}
+         ,x: 0 - current.x
+         ,y: 0 - current.y}) ? snake : _U.replace([["direction"
+                                                   ,direction]],
+         snake);
+      }();
+   });
    var appleConstructor = function (x) {
       return {_: {}
              ,owner: $Maybe.Nothing
@@ -3357,21 +3414,19 @@ Elm.Main.make = function (_elm) {
                       ,_0: x
                       ,_1: x}};
    };
-   var startTime = Elm.Native.Port.make(_elm).inbound("startTime",
-   "Int",
-   function (v) {
-      return typeof v === "number" ? v : _U.badPort("a number",
-      v);
-   });
-   var GameState = F4(function (a,
+   var GameState = F6(function (a,
    b,
    c,
-   d) {
+   d,
+   e,
+   f) {
       return {_: {}
              ,apples: d
              ,boardSize: c
              ,snake: a
-             ,snake2: b};
+             ,snake2: b
+             ,state: f
+             ,time: e};
    });
    var Apple = F3(function (a,
    b,
@@ -3388,15 +3443,17 @@ Elm.Main.make = function (_elm) {
    e) {
       return {_: {}
              ,chomp: c
-             ,color: e
+             ,color: d
              ,direction: a
-             ,parts: b
-             ,score: d};
+             ,id: e
+             ,parts: b};
    });
    var Direction = F2(function (a,
    b) {
       return {_: {},x: a,y: b};
    });
+   var Waiting = {ctor: "Waiting"};
+   var Playing = {ctor: "Playing"};
    var Air = {ctor: "Air"};
    var Border = {ctor: "Border"};
    var Tail = {ctor: "Tail"};
@@ -3410,20 +3467,26 @@ Elm.Main.make = function (_elm) {
    var Dir = function (a) {
       return {ctor: "Dir",_0: a};
    };
+   var startTime = Elm.Native.Port.make(_elm).inbound("startTime",
+   "Int",
+   function (v) {
+      return typeof v === "number" ? v : _U.badPort("a number",
+      v);
+   });
    var appleColor = A3($Color.rgb,
    0,
    255,
    255);
    var ownerColor = function (apple) {
       return function () {
-         var _v14 = apple.owner;
-         switch (_v14.ctor)
+         var _v16 = apple.owner;
+         switch (_v16.ctor)
          {case "Just":
-            return _v14._0.color;
+            return _v16._0.color;
             case "Nothing":
             return appleColor;}
          _U.badCase($moduleName,
-         "between lines 274 and 276");
+         "between lines 367 and 369");
       }();
    };
    var snake2Color = A3($Color.rgb,
@@ -3441,7 +3504,44 @@ Elm.Main.make = function (_elm) {
    var renderBoard = function (size) {
       return $Graphics$Collage.filled(boardColor)($Graphics$Collage.square(size));
    };
-   var startingApples = 25;
+   var gameLength = 60;
+   var startingApples = 50;
+   var renderPanels = F4(function (snake,
+   snake2,
+   apples,
+   _v18) {
+      return function () {
+         switch (_v18.ctor)
+         {case "_Tuple2":
+            return function () {
+                 var snake2Points = A2(scoreFor,
+                 snake2,
+                 apples);
+                 var snakePoints = A2(scoreFor,
+                 snake,
+                 apples);
+                 var fullHeight = $Basics.toFloat(_v18._1);
+                 var fullWidth = $Basics.toFloat(_v18._0);
+                 var snakeWidth = fullWidth * ($Basics.toFloat(snakePoints) / $Basics.toFloat(startingApples));
+                 var snake2Width = fullWidth * ($Basics.toFloat(snake2Points) / $Basics.toFloat(startingApples));
+                 return _L.fromArray([$Graphics$Collage.filled(appleColor)(A2($Graphics$Collage.rect,
+                                     fullWidth,
+                                     fullHeight))
+                                     ,$Graphics$Collage.move({ctor: "_Tuple2"
+                                                             ,_0: -1 * (fullWidth / 2 - snakeWidth / 2)
+                                                             ,_1: 0})($Graphics$Collage.filled(snakeColor)(A2($Graphics$Collage.rect,
+                                     snakeWidth,
+                                     fullHeight)))
+                                     ,$Graphics$Collage.move({ctor: "_Tuple2"
+                                                             ,_0: fullWidth / 2 - snake2Width / 2
+                                                             ,_1: 0})($Graphics$Collage.filled(snake2Color)(A2($Graphics$Collage.rect,
+                                     snake2Width,
+                                     fullHeight)))]);
+              }();}
+         _U.badCase($moduleName,
+         "between lines 312 and 329");
+      }();
+   });
    var startingLength = 10;
    var defaultParts = function (length) {
       return _U.eq(length,
@@ -3457,20 +3557,20 @@ Elm.Main.make = function (_elm) {
              ,chomp: Air
              ,color: color
              ,direction: {_: {},x: 0,y: dir}
+             ,id: dir
              ,parts: A2($List.map,
-             function (_v16) {
+             function (_v22) {
                 return function () {
-                   switch (_v16.ctor)
+                   switch (_v22.ctor)
                    {case "_Tuple2":
                       return {ctor: "_Tuple2"
-                             ,_0: _v16._0 * dir
-                             ,_1: _v16._1};}
+                             ,_0: _v22._0 * dir
+                             ,_1: _v22._1};}
                    _U.badCase($moduleName,
-                   "on line 92, column 34 to 44");
+                   "on line 104, column 34 to 44");
                 }();
              },
-             defaultParts(startingLength))
-             ,score: 0};
+             defaultParts(startingLength))};
    });
    var frameSpeed = 15;
    var delta = A2($Signal.map,
@@ -3490,15 +3590,15 @@ Elm.Main.make = function (_elm) {
       return $Basics.toFloat(x * scale);
    };
    var placeSegment = F2(function (color,
-   _v20) {
+   _v26) {
       return function () {
-         switch (_v20.ctor)
+         switch (_v26.ctor)
          {case "_Tuple2":
             return $Graphics$Collage.move({ctor: "_Tuple2"
-                                          ,_0: scaled(_v20._0)
-                                          ,_1: scaled(_v20._1)})($Graphics$Collage.filled(color)($Graphics$Collage.square(scaled(1))));}
+                                          ,_0: scaled(_v26._0)
+                                          ,_1: scaled(_v26._1)})($Graphics$Collage.filled(color)($Graphics$Collage.square(scaled(1))));}
          _U.badCase($moduleName,
-         "between lines 285 and 287");
+         "between lines 379 and 381");
       }();
    });
    var renderApples = function (apples) {
@@ -3556,30 +3656,33 @@ Elm.Main.make = function (_elm) {
                      snakeColor)
                      ,snake2: A2(defaultSnake,
                      1,
-                     snake2Color)};
-   var outsideBorder = function (_v24) {
+                     snake2Color)
+                     ,state: Playing
+                     ,time: gameLength * frameSpeed};
+   var outsideBorder = function (_v30) {
       return function () {
-         switch (_v24.ctor)
+         switch (_v30.ctor)
          {case "_Tuple2":
-            return _U.cmp($Basics.abs(_v24._0),
-              $Basics.abs(range)) > -1 || _U.cmp($Basics.abs(_v24._1),
+            return _U.cmp($Basics.abs(_v30._0),
+              $Basics.abs(range)) > -1 || _U.cmp($Basics.abs(_v30._1),
               $Basics.abs(range)) > -1;}
          _U.badCase($moduleName,
-         "on line 212, column 4 to 46");
+         "on line 159, column 4 to 46");
       }();
    };
    var checkSnakeStatus = F2(function (snake,
-   _v28) {
+   _v34) {
       return function () {
          return function () {
-            var snakeTail = ensureListTail(snake.parts);
-            return A2($List.any,
-            collision(snake),
-            A2($List.map,
+            var appleLocations = A2($List.map,
             function (a) {
                return a.square;
             },
-            _v28.apples)) ? Food : A2($List.any,
+            _v34.apples);
+            var snakeTail = ensureListTail(snake.parts);
+            return A2($List.any,
+            collision(snake),
+            appleLocations) ? Food : A2($List.any,
             collision(snake),
             snakeTail) ? Tail : A2($List.any,
             outsideBorder,
@@ -3602,78 +3705,106 @@ Elm.Main.make = function (_elm) {
                return eatingSnake(snake);
                case "Tail": return snake;}
             _U.badCase($moduleName,
-            "between lines 179 and 187");
+            "between lines 194 and 202");
          }();
       }();
    });
    var stepGame = F2(function (input,
-   _v31) {
+   _v37) {
       return function () {
-         return function () {
+         return _U.cmp(_v37.time,
+         0) > 0 ? function () {
             switch (input.ctor)
             {case "Delta":
                return _U.replace([["snake"
                                   ,A2(updateSnake,
-                                  _v31.snake,
-                                  _v31)]
+                                  _v37.snake,
+                                  _v37)]
                                  ,["snake2"
                                   ,A2(updateSnake,
-                                  _v31.snake2,
-                                  _v31)]
-                                 ,["apples"
-                                  ,checkForSteals(_v31)]],
-                 _v31);
+                                  _v37.snake2,
+                                  _v37)]
+                                 ,["apples",checkForSteals(_v37)]
+                                 ,["time"
+                                  ,function (t) {
+                                     return t - 1;
+                                  }(_v37.time)]],
+                 _v37);
                case "Dir":
                return _U.replace([["snake"
                                   ,A2(updateSnakeDirection,
                                   input._0,
-                                  _v31.snake)]],
-                 _v31);
+                                  _v37.snake)]
+                                 ,["time"
+                                  ,function (t) {
+                                     return t - 1;
+                                  }(_v37.time)]],
+                 _v37);
                case "Dir2":
                return _U.replace([["snake2"
                                   ,A2(updateSnakeDirection,
                                   input._0,
-                                  _v31.snake2)]],
-                 _v31);}
+                                  _v37.snake2)]
+                                 ,["time"
+                                  ,function (t) {
+                                     return t - 1;
+                                  }(_v37.time)]],
+                 _v37);}
             _U.badCase($moduleName,
-            "between lines 145 and 156");
-         }();
+            "between lines 168 and 185");
+         }() : _v37;
       }();
    });
    var gameState = A3($Signal.foldp,
    stepGame,
    defaultGame,
    input);
-   var renderScore = function (score) {
+   var renderTime = function (time) {
       return $Graphics$Collage.move({ctor: "_Tuple2"
                                     ,_0: 0
-                                    ,_1: boardSize / 2 + 10})($Graphics$Collage.toForm($Graphics$Element.show(score)));
+                                    ,_1: boardSize / 2 + 10})($Graphics$Collage.toForm($Graphics$Element.show(timeFormat(time / frameSpeed | 0))));
    };
-   var view = F2(function (_v37,
-   _v38) {
+   var renderScoreboard = F2(function (_v43,
+   _v44) {
       return function () {
          return function () {
-            switch (_v37.ctor)
+            switch (_v43.ctor)
             {case "_Tuple2":
                return A2($Graphics$Collage.collage,
-                 _v37._0,
-                 _v37._1)(A2($List._op["::"],
-                 renderScore(_v38.snake.score),
-                 A2($List._op["::"],
-                 renderScore(_v38.snake2.score),
-                 A2($List._op["::"],
-                 renderBoard(_v38.boardSize),
-                 A2($List.append,
-                 A2($List.append,
-                 renderApples(_v38.apples),
-                 A2(renderSquares,
-                 _v38.snake.parts,
-                 snakeColor)),
-                 A2(renderSquares,
-                 _v38.snake2.parts,
+                 _v43._0,
+                 _v43._1)($List.append(A4(renderPanels,
+                 _v44.snake,
+                 _v44.snake2,
+                 _v44.apples,
+                 {ctor: "_Tuple2"
+                 ,_0: _v43._0
+                 ,_1: _v43._1}))(A2($List.append,
+                 renderScores(_v44),
+                 _L.fromArray([renderTime(_v44.time)]))));}
+            _U.badCase($moduleName,
+            "between lines 305 and 307");
+         }();
+      }();
+   });
+   var view = F2(function (_v49,
+   _v50) {
+      return function () {
+         return function () {
+            switch (_v49.ctor)
+            {case "_Tuple2":
+               return A2($Graphics$Collage.collage,
+                 _v49._0,
+                 _v49._1)($List.append(_L.fromArray([$Graphics$Collage.toForm(A2(renderScoreboard,
+                 {ctor: "_Tuple2"
+                 ,_0: _v49._0
+                 ,_1: _v49._1},
+                 _v50))]))($List.append(_L.fromArray([renderBoard(_v50.boardSize)]))($List.append(renderApples(_v50.apples))($List.append(A2(renderSquares,
+                 _v50.snake.parts,
+                 snakeColor))(A2(renderSquares,
+                 _v50.snake2.parts,
                  snake2Color))))));}
             _U.badCase($moduleName,
-            "between lines 254 and 255");
+            "between lines 294 and 299");
          }();
       }();
    });
@@ -3687,6 +3818,7 @@ Elm.Main.make = function (_elm) {
                       ,frameSpeed: frameSpeed
                       ,startingLength: startingLength
                       ,startingApples: startingApples
+                      ,gameLength: gameLength
                       ,boardColor: boardColor
                       ,snakeColor: snakeColor
                       ,snake2Color: snake2Color
@@ -3702,40 +3834,49 @@ Elm.Main.make = function (_elm) {
                       ,Tail: Tail
                       ,Border: Border
                       ,Air: Air
+                      ,Playing: Playing
+                      ,Waiting: Waiting
                       ,Direction: Direction
                       ,Snake: Snake
                       ,Apple: Apple
                       ,GameState: GameState
                       ,defaultSnake: defaultSnake
+                      ,defaultParts: defaultParts
                       ,defaultApples: defaultApples
                       ,appleConstructor: appleConstructor
-                      ,defaultParts: defaultParts
+                      ,placeApple: placeApple
                       ,defaultGame: defaultGame
                       ,range: range
-                      ,placeApple: placeApple
+                      ,outsideBorder: outsideBorder
                       ,stepGame: stepGame
-                      ,checkForSteals: checkForSteals
-                      ,gettingEaten: gettingEaten
-                      ,stealApple: stealApple
                       ,updateSnake: updateSnake
                       ,updateSnakeDirection: updateSnakeDirection
                       ,checkSnakeStatus: checkSnakeStatus
-                      ,outsideBorder: outsideBorder
                       ,movingSnake: movingSnake
                       ,eatingSnake: eatingSnake
                       ,moveSnakeParts: moveSnakeParts
                       ,step: step
+                      ,checkForSteals: checkForSteals
+                      ,gettingEaten: gettingEaten
+                      ,stealApple: stealApple
                       ,collision: collision
+                      ,scoreFor: scoreFor
+                      ,isSnake: isSnake
                       ,view: view
+                      ,renderScoreboard: renderScoreboard
+                      ,renderPanels: renderPanels
+                      ,renderTime: renderTime
+                      ,renderScores: renderScores
                       ,renderScore: renderScore
                       ,renderBoard: renderBoard
                       ,renderApples: renderApples
                       ,ownerColor: ownerColor
                       ,renderSquares: renderSquares
                       ,placeSegment: placeSegment
-                      ,init: init
+                      ,chopped: chopped
                       ,scaled: scaled
-                      ,ensureListTail: ensureListTail};
+                      ,ensureListTail: ensureListTail
+                      ,timeFormat: timeFormat};
    return _elm.Main.values;
 };
 Elm.Maybe = Elm.Maybe || {};

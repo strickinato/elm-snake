@@ -5,9 +5,9 @@ import Keyboard
 import Text
 import Time exposing (..)
 import Window
-import Array exposing (..)
+import Array
 import Random
-
+import String
 -----------------------------------------------------------
 --------- CONFIG ------------------------------------------
 -----------------------------------------------------------
@@ -15,7 +15,8 @@ boardSize        = 700
 scale            = 10
 frameSpeed       = 15
 startingLength   = 10
-startingApples   = 25
+startingApples   = 50
+gameLength       = 60
 
 boardColor       = Color.rgb 0 0 0
 snakeColor       = Color.rgb 255 0 255
@@ -65,6 +66,10 @@ type Chomp
   | Border
   | Air
 
+type State
+  = Playing
+  | Waiting
+
 type alias Direction = { x : Int, y : Int }
 
 type alias Square = (Int, Int)
@@ -73,8 +78,8 @@ type alias Snake =
   { direction:Direction
   , parts:List(Square)
   , chomp:Chomp
-  , score:Int
   , color:Color.Color
+  , id:Int
   }
 
 type alias Apple =
@@ -88,6 +93,8 @@ type alias GameState =
   , snake2:Snake
   , boardSize:Float
   , apples:List Apple
+  , time: Int
+  , state: State
   }
 
 
@@ -96,8 +103,8 @@ defaultSnake dir color=
   { direction = { x = 0 , y = dir }
   , parts = List.map (\(x,y) -> (x * dir, y)) (defaultParts startingLength)
   , chomp = Air
-  , score = 0
   , color = color
+  , id = dir
   }
 
 
@@ -138,6 +145,8 @@ defaultGame =
   , snake2 = defaultSnake 1 snake2Color
   , boardSize = boardSize
   , apples = defaultApples startingApples
+  , time = gameLength * frameSpeed
+  , state = Playing
   }
 
 
@@ -154,19 +163,27 @@ outsideBorder (x, y) =
 --------- UPDATE ------------------------------------------
 -----------------------------------------------------------
 stepGame : Input -> GameState -> GameState
-stepGame input ({snake, snake2, apples, boardSize} as gameState) =
-  case input of
-    Dir direction ->
-      { gameState | snake <- updateSnakeDirection direction snake }
+stepGame input ({snake, snake2, time} as gameState) =
+  if time > 0 then
+    case input of
+      Dir direction ->
+        { gameState | snake <- updateSnakeDirection direction snake
+                    , time  <- (\t -> t - 1) time
+        }
 
-    Dir2 direction ->
-      { gameState | snake2 <- updateSnakeDirection direction snake2 }
+      Dir2 direction ->
+        { gameState | snake2 <- updateSnakeDirection direction snake2
+                    , time  <- (\t -> t - 1) time
+        }
 
-    Delta _ ->
-      { gameState | snake  <- updateSnake snake gameState
-                  , snake2 <- updateSnake snake2 gameState
-                  , apples <- checkForSteals gameState
-      }
+      Delta _ ->
+        { gameState | snake  <- updateSnake snake gameState
+                    , snake2 <- updateSnake snake2 gameState
+                    , apples <- checkForSteals gameState
+                    , time  <- (\t -> t - 1) time
+        }
+  else
+    gameState
 
 
 updateSnake : Snake -> GameState -> Snake
@@ -258,24 +275,86 @@ collision snake square =
       Just chomp -> chomp == square
       Nothing    -> False
 
+scoreFor : Snake -> List Apple -> Int
+scoreFor snake apples =
+  List.length (List.filterMap (\n -> isSnake n.owner snake ) apples)
+
+
+isSnake : Maybe Snake -> Snake -> Maybe Snake
+isSnake owner snake =
+  case owner of
+    Just owner -> if owner.id == snake.id then Just owner else Nothing
+    Nothing    -> Nothing
+
 -----------------------------------------------------------
 --------- DISPLAY -----------------------------------------
 -----------------------------------------------------------
 view : (Int,Int) -> GameState -> Element
-view (w,h) {snake, snake2, boardSize, apples} =
-  collage w h --Something must be done about this beheamoth
-    <| renderScore snake.score :: renderScore snake2.score :: renderBoard boardSize :: List.append (List.append (renderApples apples) (renderSquares snake.parts snakeColor)) ((renderSquares snake2.parts snake2Color))
+view (w,h) ({snake, snake2, boardSize, apples, time} as gameState) =
+  collage w h
+    <| List.append [toForm (renderScoreboard (w,h) gameState)]
+    <| List.append [renderBoard boardSize]
+    <| List.append (renderApples apples)
+    <| List.append (renderSquares snake.parts snakeColor)
+    <|             (renderSquares snake2.parts snake2Color)
 
-renderScore : Int -> Form
-renderScore score =
-  move (0,(boardSize / 2) + 10)
-    <| toForm (show score)
+
+
+renderScoreboard : (Int,Int) -> GameState -> Element
+renderScoreboard (w,h) ({snake, snake2, boardSize, apples, time} as gameState) =
+  collage w h
+    <| List.append (renderPanels snake snake2 apples (w,h))
+    <| List.append (renderScores gameState) [renderTime time]
+
+
+renderPanels : Snake -> Snake -> List Apple -> (Int, Int) -> List Form
+renderPanels snake snake2 apples (w,h) =
+  let
+    fullWidth = toFloat w
+    fullHeight = toFloat h
+
+    snakePoints  = scoreFor snake apples
+    snake2Points = scoreFor snake2 apples
+    snakeWidth   = (fullWidth * ( (toFloat snakePoints) / toFloat startingApples ))
+    snake2Width  = (fullWidth * ( (toFloat snake2Points) / toFloat startingApples ))
+  in
+    [ rect (fullWidth) (fullHeight)
+        |> filled appleColor
+    , rect snakeWidth (fullHeight)
+        |> filled snakeColor
+        |> move (-1 * ((fullWidth / 2) - (snakeWidth / 2)), 0)
+    , rect snake2Width (fullHeight)
+        |> filled snake2Color
+        |> move ((fullWidth / 2) - (snake2Width / 2), 0)
+    ]
+
+
+renderTime : Int -> Form
+renderTime time =
+  timeFormat (time // frameSpeed)
+  |> show
+  |> toForm
+  |> move (0, (boardSize / 2) + 10)
+
+
+renderScores : GameState -> List Form
+renderScores {snake, snake2, boardSize, apples, time} =
+  [renderScore (scoreFor snake apples) (-1 * ((boardSize / 2) + 100)), renderScore (scoreFor snake2 apples) ((boardSize / 2) + 100)]
+
+
+renderScore : Int -> Float -> Form
+renderScore score offset =
+  toString score
+  |> Text.fromString
+  |> Text.height 36
+  |> Text.monospace
+  |> text
+  |> move (offset, 0)
   
 
 renderBoard : Float -> Form
 renderBoard size =
-  filled boardColor
-    <| square size
+  square size |> filled boardColor
 
 
 renderApples : List Apple -> List Form
@@ -297,9 +376,10 @@ renderSquares squares color =
 
 placeSegment : Color.Color -> Square -> Form
 placeSegment color (x, y) =
-  move (scaled x, scaled y)
-    <| filled color
-    <| square (scaled 1)
+  square (scaled 1)
+  |> filled color
+  |> move (scaled x, scaled y)
+    
 
 -----------------------------------------------------------
 --------- UTILITY -----------------------------------------
@@ -310,9 +390,11 @@ chopped list =
     head :: []   -> []
     head :: tail -> head :: chopped tail
 
+
 scaled : Int -> Float
 scaled x =
   toFloat (x * scale)
+
 
 ensureListTail : List a -> List a
 ensureListTail list =
@@ -322,3 +404,13 @@ ensureListTail list =
     case maybeTail of
       Just tail -> tail
       Nothing -> []
+
+
+timeFormat : Int -> String
+timeFormat time =
+  let
+    minutes = time // 60
+    seconds = time % 60
+  in
+    if | seconds >= 10 -> String.concat [toString minutes, ":", toString seconds]
+       | otherwise     -> String.concat [toString minutes, ":0", toString seconds]
